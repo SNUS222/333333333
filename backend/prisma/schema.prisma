@@ -1,0 +1,159 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Plan {
+  FREE
+  PREMIUM
+}
+
+enum ReportStatus {
+  PENDING
+  ANALYZING
+  PLANNING
+  SEARCHING_SOURCES
+  WRITING
+  FORMATTING
+  RENDERING
+  COMPLETED
+  FAILED
+}
+
+enum PipelineStage {
+  TOPIC_ANALYSIS
+  TEMPLATE_ANALYSIS
+  STRUCTURE
+  SOURCES
+  WRITING
+  FORMATTING
+  RENDERING
+  EXPORT
+}
+
+model User {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  passwordHash    String?
+  name            String?
+  avatarUrl       String?
+  role            Role     @default(USER)
+  plan            Plan     @default(FREE)
+  googleId        String?  @unique
+  stripeCustomerId String? @unique
+  stripeSubscriptionId String? @unique
+  subscriptionStatus String?
+  subscriptionPeriodEnd DateTime?
+  emailVerified   Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  reports   Report[]
+  templates Template[]
+  usage     UsageEvent[]
+
+  @@index([plan])
+  @@index([role])
+}
+
+model Template {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  originalFilename String
+  mimeType    String
+  size        Int
+  storagePath String
+  styleJson   Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  reports Report[]
+
+  @@index([userId])
+}
+
+model Report {
+  id          String       @id @default(cuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  templateId  String?
+  template    Template?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  topic       String
+  discipline  String
+  language    String
+  pages       Int
+  difficulty  String   @default("standard")
+  requirements String?
+
+  status      ReportStatus @default(PENDING)
+  progress    Int          @default(0)
+
+  outlineJson Json?
+  sourcesJson Json?
+  contentJson Json?
+  styleJson   Json?
+
+  docxPath    String?
+  pdfPath     String?
+
+  errorMessage String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  events PipelineEvent[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model PipelineEvent {
+  id        String        @id @default(cuid())
+  reportId  String
+  report    Report        @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  stage     PipelineStage
+  message   String
+  payload   Json?
+  createdAt DateTime      @default(now())
+
+  @@index([reportId])
+}
+
+model UsageEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String
+  pages     Int      @default(0)
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([kind])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  action    String
+  target    String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([actorId])
+  @@index([action])
+}
